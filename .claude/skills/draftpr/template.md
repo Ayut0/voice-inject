@@ -1,11 +1,11 @@
 ## Summary
-- 
+-
 
 ## Changes
-- 
+-
 
 ## Screenshots / Logs (if applicable)
-- 
+-
 
 ## Testing
 - [ ] Not run (explain why)
