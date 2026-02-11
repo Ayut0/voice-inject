@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /Users/yuto/Documents/Web_Development/tools/push-2-talk log --oneline -20)",
+      "Bash(go build:*)",
+      "Bash(git -C /Users/yuto/Documents/Web_Development/tools/push-2-talk status)",
+      "Bash(git -C /Users/yuto/Documents/Web_Development/tools/push-2-talk diff)",
+      "Bash(git -C /Users/yuto/Documents/Web_Development/tools/push-2-talk log --oneline -5)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd CLAUDE.md and convert Codex prompt to Claude Code skill\n\n- Add CLAUDE.md with project overview, build commands, architecture, and conventions\n- Convert .codex/prompts/draftpr.md to .claude/skills/draftpr/ skill\n- Move PR template from .github/ into the draftpr skill as template.md\n- Remove .codex/prompts/draftpr.md\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C /Users/yuto/Documents/Web_Development/tools/push-2-talk diff main...HEAD)",
+      "Bash(git -C /Users/yuto/Documents/Web_Development/tools/push-2-talk log main..HEAD --oneline)",
+      "Bash(gh pr list:*)",
+      "Bash(git -C /Users/yuto/Documents/Web_Development/tools/push-2-talk remote -v)",
+      "Bash(git -C /Users/yuto/Documents/Web_Development/tools/push-2-talk push -u origin feat/integrate-claude-code)",
+      "Bash(gh pr create:*)",
+      "Bash(git -C /Users/yuto/Documents/Web_Development/tools/push-2-talk log --oneline --all --graph -20)",
+      "Bash(gh issue list:*)",
+      "Bash(./voice-inject:*)",
+      "Bash(echo:*)"
+    ]
+  }
+}
