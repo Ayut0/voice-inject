@@ -12,3 +12,4 @@ func PrintUsage(w io.Writer) {
 	fmt.Fprintln(w, "  daemon   Run the background hotkey listener")
 	fmt.Fprintln(w, "  inject   Read stdin and paste it (debug)")
 }
+
