@@ -8,7 +8,6 @@ import (
 
 	"voice-inject/internal/commands"
 	"voice-inject/internal/config"
-	"voice-inject/internal/daemon"
 	"voice-inject/internal/logging"
 )
 
@@ -24,12 +23,17 @@ func main() {
 		defer cancel() // cleanup when main function returns
 		logger := logging.New(os.Stdout)
 		cfg := config.Default()
-		if err := daemon.Run(ctx, cfg, logger); err != nil {
+		if err := commands.RunDaemon(ctx, cfg, logger); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
 	case "inject":
-		fmt.Fprintln(os.Stdout, "inject selected")
+		logger := logging.New(os.Stdout)
+		cfg := config.Default()
+		if err := commands.RunInject(os.Stdin, cfg, logger); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
 	default:
 		fmt.Fprintln(os.Stdout, "unknown command")
 		os.Exit(2)
