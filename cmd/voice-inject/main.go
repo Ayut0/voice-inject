@@ -1,10 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 
 	"voice-inject/internal/commands"
+	"voice-inject/internal/config"
+	"voice-inject/internal/daemon"
+	"voice-inject/internal/logging"
 )
 
 func main() {
@@ -15,7 +20,14 @@ func main() {
 
 	switch os.Args[1] {
 	case "daemon":
-		fmt.Fprintln(os.Stdout, "daemon selected")
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+		defer cancel() // cleanup when main function returns
+		logger := logging.New(os.Stdout)
+		cfg := config.Default()
+		if err := daemon.Run(ctx, cfg, logger); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
 	case "inject":
 		fmt.Fprintln(os.Stdout, "inject selected")
 	default:
