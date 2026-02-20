@@ -17,6 +17,7 @@ type Config struct {
 	MinTextLength     int
 	MaxTextLength     int
 	CamelCaseRule     bool
+	WhisperModel      string
 }
 
 func Default() Config {
@@ -28,5 +29,6 @@ func Default() Config {
 		MinTextLength:     3,
 		MaxTextLength:     5000,
 		CamelCaseRule:     false,
+		WhisperModel:      "/Users/yuto/.local/share/whisper-cpp/models/ggml-base.bin",
 	}
 }
