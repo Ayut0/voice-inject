@@ -1,6 +1,26 @@
 package transcribe
 
-import "errors"
+import (
+	"fmt"
+	"os/exec"
+	"strings"
+	"voice-inject/internal/logging"
+)
 
-// transcribe will call whisper-cpp to transcribe the audio file
-var ErrNotImplemented = errors.New("transcription not implemented")
+func Run(wavPath string, modelPath string, lang string, logger *logging.Logger) (string, error) {
+	logger.State("transcribing", "model="+modelPath)
+
+	cmd := exec.Command("whisper-cli", "-m", modelPath, "-f", wavPath, "--no-timestamps", "-l", lang)
+
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("whisper-cli failed: %w", err)
+	}
+
+	text := strings.TrimSpace(string(output))
+	if text == "" {
+		return "", fmt.Errorf("whisper-cli returned empty output")
+	}
+
+	return text, nil
+}
