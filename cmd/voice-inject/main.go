@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -25,10 +26,14 @@ func run() {
 
 	switch os.Args[1] {
 	case "daemon":
+		daemonFlags := flag.NewFlagSet("daemon", flag.ExitOnError)
+		lang := daemonFlags.String("lang", "en", "language to use for transcription(en, ja)")
+		daemonFlags.Parse(os.Args[2:])
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer cancel() // cleanup when main function returns
 		logger := logging.New(os.Stdout)
 		cfg := config.Default()
+		cfg.DefaultLanguage = config.Language(*lang)
 		if err := commands.RunDaemon(ctx, cfg, logger); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
