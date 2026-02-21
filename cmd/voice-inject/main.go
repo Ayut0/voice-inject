@@ -9,9 +9,15 @@ import (
 	"voice-inject/internal/commands"
 	"voice-inject/internal/config"
 	"voice-inject/internal/logging"
+
+	"golang.design/x/hotkey/mainthread"
 )
 
 func main() {
+	mainthread.Init(run)
+}
+
+func run() {
 	if len(os.Args) < 2 || os.Args[1] == "--help" || os.Args[1] == "-h" {
 		commands.PrintUsage(os.Stdout)
 		os.Exit(2)
