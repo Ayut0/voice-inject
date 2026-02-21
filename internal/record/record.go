@@ -19,6 +19,8 @@ type Recorder struct {
 	logger *logging.Logger
 }
 
+// Start begins recording audio to a temporary WAV file.
+// Returns immediately — audio is captured in the background by ffmpeg.
 func Start (logger *logging.Logger) (*Recorder, error) {
 	// create a temporary file for the recording
 	outPath := filepath.Join(os.TempDir(), "voice-inject-recording.wav")
@@ -46,8 +48,24 @@ func Start (logger *logging.Logger) (*Recorder, error) {
 
 }
 
-func Stop (){
+// Stop ends the recording gracefully by sending "q" to ffmpeg's stdin.
+// Returns the path to the recorded WAV file.
+func Stop (r *Recorder)(string, error) {
+	// Send "q" to ffmpeg to stop gracefully (finalizes WAV header)
+	_, err := r.stdin.Write([]byte("q"))
 
+	if err != nil {
+		return "", fmt.Errorf("failed to write to stdin: %w", err)
+	}
+	r.stdin.Close()
+
+	if err := r.cmd.Wait(); err != nil {
+		return "", fmt.Errorf("ffmpeg exited with error: %w", err)
+	}
+
+	// returns the path to the recorded WAV file
+	r.logger.State("recording stopped", "file="+r.outPath)
+	return r.outPath, nil
 }
 
 func Cleanup () {
