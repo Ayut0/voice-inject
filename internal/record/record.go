@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"voice-inject/internal/logging"
 )
 
@@ -20,7 +19,12 @@ type Recorder struct {
 // Returns immediately — audio is captured in the background by ffmpeg.
 func Start(logger *logging.Logger) (*Recorder, error) {
 	// create a temporary file for the recording
-	outPath := filepath.Join(os.TempDir(), "voice-inject-recording.wav")
+	f, err := os.CreateTemp("", "voice-inject-*.wav")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp file: %w", err)
+	}
+	outPath := f.Name()
+	f.Close()
 
 	cmd := exec.Command("ffmpeg", "-f", "avfoundation", "-i", ":0", "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", "-y", outPath)
 
