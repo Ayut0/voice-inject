@@ -33,7 +33,12 @@ func run() {
 		defer cancel() // cleanup when main function returns
 		logger := logging.New(os.Stdout)
 		cfg := config.Default()
-		cfg.DefaultLanguage = config.Language(*lang)
+		langVal := config.Language(*lang)
+		if !config.ValidLanguage(langVal) {
+			fmt.Fprintf(os.Stderr, "unsupported language: %q (supported: en, ja)\n", *lang)
+			os.Exit(1)
+		}
+		cfg.DefaultLanguage = langVal
 		if err := commands.RunDaemon(ctx, cfg, logger); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)

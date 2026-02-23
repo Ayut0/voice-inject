@@ -20,6 +20,15 @@ type Config struct {
 	WhisperModel      string
 }
 
+// ValidLanguage reports whether lang is a supported language.
+func ValidLanguage(lang Language) bool {
+	switch lang {
+	case English, Japanese:
+		return true
+	}
+	return false
+}
+
 func Default() Config {
 	return Config{
 		MinRecordDuration: 700 * time.Millisecond,
