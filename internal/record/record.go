@@ -1,6 +1,7 @@
 package record
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -17,7 +18,7 @@ type Recorder struct {
 
 // Start begins recording audio to a temporary WAV file.
 // Returns immediately — audio is captured in the background by ffmpeg.
-func Start(logger *logging.Logger) (*Recorder, error) {
+func Start(ctx context.Context, logger *logging.Logger) (*Recorder, error) {
 	// create a temporary file for the recording
 	f, err := os.CreateTemp("", "voice-inject-*.wav")
 	if err != nil {
@@ -26,7 +27,7 @@ func Start(logger *logging.Logger) (*Recorder, error) {
 	outPath := f.Name()
 	f.Close()
 
-	cmd := exec.Command("ffmpeg", "-f", "avfoundation", "-i", ":0", "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", "-y", outPath)
+	cmd := exec.CommandContext(ctx, "ffmpeg", "-f", "avfoundation", "-i", ":0", "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", "-y", outPath)
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
