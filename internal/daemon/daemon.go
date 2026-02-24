@@ -66,6 +66,14 @@ func run(ctx context.Context, cfg config.Config, logger *logging.Logger) error {
 			// Postprocess
 			text = postprocess.Normalize(text)
 
+			// Validate
+			if err := postprocess.Validate(text, cfg); err != nil {
+				logger.Printf("validation error: %v", err)
+				rec.Cleanup()
+				logger.State(state.Idle.String())
+				continue
+			}
+
 			// Inject
 			if err := inject.Paste(text, logger); err != nil {
 				logger.Printf("inject error: %v", err)
