@@ -36,7 +36,7 @@ func run(ctx context.Context, cfg config.Config, logger *logging.Logger) error {
 			return nil
 		case <-hk.Keydown():
 			// Start recording
-			rec, err := record.Start(logger)
+			rec, err := record.Start(ctx, logger)
 			if err != nil {
 				logger.Printf("record error: %v", err)
 				continue
@@ -55,7 +55,7 @@ func run(ctx context.Context, cfg config.Config, logger *logging.Logger) error {
 			}
 
 			// Transcribe
-			text, err := transcribe.Run(wavPath, cfg.WhisperModel, string(cfg.DefaultLanguage), logger)
+			text, err := transcribe.Run(ctx, wavPath, cfg.WhisperModel, string(cfg.DefaultLanguage), logger)
 			if err != nil {
 				logger.Printf("transcribe error: %v", err)
 				rec.Cleanup()

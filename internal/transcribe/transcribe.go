@@ -1,16 +1,21 @@
 package transcribe
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 	"voice-inject/internal/logging"
 )
 
-func Run(wavPath string, modelPath string, lang string, logger *logging.Logger) (string, error) {
+func Run(ctx context.Context, wavPath string, modelPath string, lang string, logger *logging.Logger) (string, error) {
 	logger.State("transcribing", "model="+modelPath)
 
-	cmd := exec.Command("whisper-cli", "-m", modelPath, "-f", wavPath, "--no-timestamps", "-l", lang)
+	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "whisper-cli", "-m", modelPath, "-f", wavPath, "--no-timestamps", "-l", lang)
 
 	output, err := cmd.Output()
 	if err != nil {
