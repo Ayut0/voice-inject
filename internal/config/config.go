@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"os"
+	"path/filepath"
+	"time"
+)
 
 type Language string
 
@@ -29,6 +33,15 @@ func ValidLanguage(lang Language) bool {
 	return false
 }
 
+func defaultModelPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = "."
+	}
+
+	return filepath.Join(home, ".local", "share", "whisper-cpp", "models", "ggml-base.bin")
+}
+
 func Default() Config {
 	return Config{
 		MinRecordDuration: 700 * time.Millisecond,
@@ -38,6 +51,6 @@ func Default() Config {
 		MinTextLength:     3,
 		MaxTextLength:     5000,
 		CamelCaseRule:     false,
-		WhisperModel:      "/Users/yuto/.local/share/whisper-cpp/models/ggml-base.bin",
+		WhisperModel:      defaultModelPath(),
 	}
 }
