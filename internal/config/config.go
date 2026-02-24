@@ -21,6 +21,7 @@ type Config struct {
 	MinTextLength     int
 	MaxTextLength     int
 	CamelCaseRule     bool
+	MaxSymbolRatio    float64
 	WhisperModel      string
 }
 
@@ -51,6 +52,7 @@ func Default() Config {
 		MinTextLength:     3,
 		MaxTextLength:     5000,
 		CamelCaseRule:     false,
+		MaxSymbolRatio:    0.5,
 		WhisperModel:      defaultModelPath(),
 	}
 }
