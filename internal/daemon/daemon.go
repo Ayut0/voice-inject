@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"voice-inject/internal/config"
 	"voice-inject/internal/inject"
@@ -20,6 +21,9 @@ func Run(ctx context.Context, cfg config.Config, logger *logging.Logger) error {
 }
 
 func run(ctx context.Context, cfg config.Config, logger *logging.Logger) error {
+	if _, err := os.Stat(cfg.WhisperModel); err != nil {
+		return fmt.Errorf("whisper model not found at %s: %w", cfg.WhisperModel, err)
+	}
 	// Register hotkey for recording
 	hk := hotkey.New([]hotkey.Modifier{hotkey.ModOption}, hotkey.KeySpace)
 	if err := hk.Register(); err != nil {
