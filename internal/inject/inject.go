@@ -11,6 +11,16 @@ import (
 	"voice-inject/internal/logging"
 )
 
+func CheckAccessibility() error {
+	cmd := exec.Command("osascript", "-e", `tell application "System Events" to return "ok"`)
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("accessibility permission required: grant access in System Settings > Privacy & Security > Accessibility")
+	}
+
+	return nil
+}
+
 func Paste(text string, logger *logging.Logger) error {
 	trimmed := strings.TrimSpace(text)
 
