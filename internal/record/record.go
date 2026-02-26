@@ -2,6 +2,7 @@ package record
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -71,5 +72,7 @@ func (r *Recorder) Stop() (string, error) {
 
 // Cleanup removes the temporary WAV file.
 func (r *Recorder) Cleanup() {
-	os.Remove(r.outPath)
+	if err := os.Remove(r.outPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		r.logger.Printf("failed to remove temp file: %v", err)
+	}
 }
