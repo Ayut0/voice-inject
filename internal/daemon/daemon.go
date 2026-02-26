@@ -24,6 +24,9 @@ func run(ctx context.Context, cfg config.Config, logger *logging.Logger) error {
 	if _, err := os.Stat(cfg.WhisperModel); err != nil {
 		return fmt.Errorf("whisper model not found at %s: %w", cfg.WhisperModel, err)
 	}
+	if err := inject.CheckAccessibility(); err != nil {
+		return fmt.Errorf("accessibility check failed: %w", err)
+	}
 	// Register hotkey for recording
 	hk := hotkey.New([]hotkey.Modifier{hotkey.ModOption}, hotkey.KeySpace)
 	if err := hk.Register(); err != nil {
