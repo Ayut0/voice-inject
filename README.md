@@ -50,8 +50,8 @@ Models with an `.en` suffix (e.g., `ggml-base.en.bin`) are English-only and slig
 ### 3. Build voice-inject
 
 ```bash
-git clone https://github.com/Ayut0/push-2-talk.git
-cd push-2-talk
+git clone https://github.com/Ayut0/voice-inject.git
+cd voice-inject
 go build ./cmd/voice-inject
 ```
 
@@ -60,6 +60,20 @@ go build ./cmd/voice-inject
 voice-inject uses `osascript` to simulate a Cmd+V keystroke. macOS requires Accessibility permission for this.
 
 **System Settings > Privacy & Security > Accessibility** — add your terminal emulator (e.g., Terminal, iTerm2, Alacritty).
+
+### 5. Grant Microphone permission
+
+macOS requires Microphone permission for audio capture.
+
+**System Settings > Privacy & Security > Microphone** — enable access for your terminal emulator.
+
+### 6. (Optional) Install system-wide
+
+Move the binary to a directory in your PATH to run `voice-inject` from anywhere:
+
+```bash
+mv voice-inject /usr/local/bin/voice-inject
+```
 
 ## Usage
 
@@ -80,14 +94,29 @@ Press **Ctrl+C** to stop the daemon.
 
 ### Language selection
 
-Use the `-lang` flag to set the transcription language:
+Use the `-lang` flag to set the transcription language (default: `en`):
+
+| Flag | Language |
+|------|----------|
+| `en` | English (default) |
+| `ja` | Japanese |
 
 ```bash
-# English (default)
-./voice-inject daemon -lang en
-
-# Japanese
 ./voice-inject daemon -lang ja
+```
+
+### Run in the background
+
+To keep the daemon running in the background:
+
+```bash
+./voice-inject daemon &
+```
+
+To stop it:
+
+```bash
+kill %1
 ```
 
 ### Debug: inject text from stdin
@@ -134,7 +163,7 @@ internal/
 
 **"Is Accessibility enabled?"** — Grant Accessibility permission to your terminal in System Settings > Privacy & Security > Accessibility.
 
-**No audio captured** — Make sure your microphone is working and `ffmpeg` is installed (`brew install ffmpeg`).
+**No audio captured** — Make sure your microphone is working, `ffmpeg` is installed (`brew install ffmpeg`), and your terminal has Microphone permission in System Settings > Privacy & Security > Microphone.
 
 **Transcription fails** — Verify the Whisper model exists at `~/.local/share/whisper-cpp/models/ggml-base.bin` and `whisper-cpp` is installed (`brew install whisper-cpp`).
 
