@@ -29,8 +29,8 @@
 **Interfaces:**
 - Consumes: `TranscriptPayload` (#29)
 - Produces (used by Task 2):
-  - `struct HistoryEntry: Codable, Equatable, Identifiable { let at: Date; let text: String; let lang: String; let durationMs: Int64; var id: Date { at } }`
-  - `@Observable @MainActor final class HistoryStore { init(fileURL: URL, defaults: UserDefaults = .standard); private(set) var entries: [HistoryEntry]; var recordingEnabled: Bool { get set } /* persisted */; func record(_ payload: TranscriptPayload, at: Date); func clear() }`
+  - `struct HistoryEntry: Codable, Equatable, Identifiable { let id: UUID; let at: Date; let text: String; let lang: String; let durationMs: Int64 }` — `id` is a real UUID persisted in the JSONL line (the ISO8601 `at` field drops sub-second precision, so a date-derived id would collide for two dictations in the same second after a reload); lines written before this field existed decode with a fresh UUID
+  - `@Observable @MainActor final class HistoryStore { init(fileURL: URL, defaults: UserDefaults = .standard); private(set) var entries: [HistoryEntry]; var recordingEnabled: Bool { get set } /* persisted */; func record(_ payload: TranscriptPayload, at: Date = Date()); func clear() }`
   - `record` is a no-op when `recordingEnabled` is false
   - `static func defaultFileURL() -> URL` — the Application Support path
 
@@ -47,17 +47,20 @@ final class HistoryStoreTests: XCTestCase {
     private var dir: URL!
     private var fileURL: URL!
     private var defaults: UserDefaults!
+    private var suiteName: String!
 
     override func setUp() async throws {
         dir = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         fileURL = dir.appendingPathComponent("history.jsonl")
-        defaults = UserDefaults(suiteName: "HistoryStoreTests-\(UUID().uuidString)")!
+        suiteName = "HistoryStoreTests-\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)!
     }
 
     override func tearDown() async throws {
         try? FileManager.default.removeItem(at: dir)
+        defaults.removePersistentDomain(forName: suiteName) // no plist litter
     }
 
     private func payload(_ text: String) -> TranscriptPayload {
@@ -78,6 +81,16 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.entries.map(\.text), ["second", "first"])
         XCTAssertEqual(reloaded.entries[1].durationMs, 1200)
         XCTAssertEqual(reloaded.entries[1].lang, "en")
+    }
+
+    func testSameSecondEntriesKeepDistinctIDsAcrossReload() {
+        // ISO8601 truncates to whole seconds; ids must not collide.
+        let store = HistoryStore(fileURL: fileURL, defaults: defaults)
+        store.record(payload("a"), at: t(0))
+        store.record(payload("b"), at: t(0.5))
+
+        let reloaded = HistoryStore(fileURL: fileURL, defaults: defaults)
+        XCTAssertEqual(Set(reloaded.entries.map(\.id)).count, 2)
     }
 
     func testCorruptLinesAreSkipped() throws {
@@ -130,11 +143,31 @@ import Foundation
 import Observation
 
 struct HistoryEntry: Codable, Equatable, Identifiable {
+    let id: UUID
     let at: Date
     let text: String
     let lang: String
     let durationMs: Int64
-    var id: Date { at }
+
+    init(id: UUID = UUID(), at: Date, text: String, lang: String, durationMs: Int64) {
+        self.id = id
+        self.at = at
+        self.text = text
+        self.lang = lang
+        self.durationMs = durationMs
+    }
+
+    // ISO8601 truncates to whole seconds, so `at` cannot serve as the
+    // identity; a missing id (line written by an older build) gets a
+    // fresh UUID on load.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        at = try c.decode(Date.self, forKey: .at)
+        text = try c.decode(String.self, forKey: .text)
+        lang = try c.decode(String.self, forKey: .lang)
+        durationMs = try c.decode(Int64.self, forKey: .durationMs)
+    }
 }
 
 /// Owns the transcript history JSONL file. The daemon never writes
@@ -277,7 +310,7 @@ import SwiftUI
 
 struct HistoryView: View {
     @Environment(AppModel.self) private var model
-    @State private var copiedID: Date?
+    @State private var copiedID: UUID?
 
     var body: some View {
         @Bindable var history = model.history
@@ -390,5 +423,5 @@ git commit -m "Add history tab with copy and privacy toggle"
 ## Self-Review (completed at plan time)
 
 - **Spec/issue coverage:** every enabled transcript appends to file + list (T1 tests, acceptance 1/3), copy button via NSPasteboard (T2, acceptance 2), privacy toggle no-ops recording without touching dictation (T1 `testDisabledRecordingIsNoOp`, acceptance 5), persistence across restarts (T1 reload test, acceptance 4), corrupt-line tolerance (T1), daemon stateless — zero Go changes (Global Constraints), newest-first (T1 + acceptance 1).
-- **Type consistency:** `TranscriptPayload` field names match #29 (`text`, `lang`, `durationMs`); `HistoryEntry.id` derives from `at` (collision risk between two dictations in the same millisecond is acceptable for a personal tool — noted, not hidden); `AppModel.history` name used identically in T2's view; MainWindow diff matches the exact #29 text including the placeholder comment.
+- **Type consistency:** `TranscriptPayload` field names match #29 (`text`, `lang`, `durationMs`); `HistoryEntry.id` is a persisted UUID (a date-derived id would collide within the same second after an ISO8601 round-trip — caught in review, fixed, and regression-tested); `AppModel.history` name used identically in T2's view; MainWindow diff matches the exact #29 text including the placeholder comment.
 - **Placeholder scan:** none — all code complete.

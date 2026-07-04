@@ -15,6 +15,7 @@
 - Fix actions: System Settings deep links `x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility` / `?Privacy_Microphone`; copyable `brew install` commands; model downloader (issue #32)
 - Model catalog (README table): tiny 75 MiB, base 142 MiB (recommended), small 466 MiB, medium 1.5 GiB, large-v3-turbo 1.5 GiB; source `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-<name>.bin`; destination `~/.local/share/whisper-cpp/models/`
 - After a successful download: `setConfig(model: <destination path>)` (issue #32)
+- The downloader always installs into `defaultModelsDir()`, even if the user configured a custom model path elsewhere — `setConfig` then repoints config to the default dir. Deliberate v1 simplification.
 - "Re-run checks" re-evaluates without an app restart (issue #32)
 - Do NOT set `client.onErrorEvent` directly — extend `AppModel`'s fan-out (convention established in #30's plan)
 - All code under `app/Sources/VoiceInject/`, tests under `app/Tests/VoiceInjectTests/`; `swift test` must pass; imperative commit subjects
@@ -356,54 +357,72 @@ final class ModelDownloader {
 
     /// Streams the model to a temp file, moves it into place, then hands
     /// the installed path to `onInstalled` (which calls setConfig).
+    /// The byte transfer runs OFF the main actor — a 1.5 GiB stream with
+    /// per-MiB disk flushes must never stall the UI; only `state`
+    /// updates hop back to the main actor.
     func download(_ entry: ModelCatalog.Entry, to modelsDir: URL, onInstalled: @escaping (String) async -> Void) {
         guard task == nil else { return }
         state = .downloading(entry: entry.name, fraction: 0)
 
-        task = Task { @MainActor in
-            defer { task = nil }
+        task = Task { [weak self] in
+            defer { self?.task = nil }
             do {
-                let destination = entry.destinationURL(modelsDir: modelsDir)
-                try FileManager.default.createDirectory(at: modelsDir, withIntermediateDirectories: true)
-
-                let (bytes, response) = try await URLSession.shared.bytes(from: entry.sourceURL)
-                guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                    throw URLError(.badServerResponse)
-                }
-                let total = Double(http.expectedContentLength)
-
-                let tmp = modelsDir.appendingPathComponent(entry.fileName + ".partial")
-                FileManager.default.createFile(atPath: tmp.path, contents: nil)
-                let handle = try FileHandle(forWritingTo: tmp)
-                defer { try? handle.close() }
-
-                var buffer = Data(); buffer.reserveCapacity(1 << 20)
-                var written: Int64 = 0
-                for try await byte in bytes {
-                    buffer.append(byte)
-                    if buffer.count >= 1 << 20 { // flush + progress per MiB
-                        try handle.write(contentsOf: buffer)
-                        written += Int64(buffer.count)
-                        buffer.removeAll(keepingCapacity: true)
-                        if total > 0 {
-                            state = .downloading(entry: entry.name, fraction: Double(written) / total)
-                        }
+                let path = try await Self.transfer(entry: entry, modelsDir: modelsDir) { fraction in
+                    Task { @MainActor in
+                        self?.state = .downloading(entry: entry.name, fraction: fraction)
                     }
                 }
-                try handle.write(contentsOf: buffer)
-                try handle.close()
-
-                if FileManager.default.fileExists(atPath: destination.path) {
-                    try FileManager.default.removeItem(at: destination)
-                }
-                try FileManager.default.moveItem(at: tmp, to: destination)
-
-                await onInstalled(destination.path)
-                state = .finished(path: destination.path)
+                await onInstalled(path)
+                self?.state = .finished(path: path)
             } catch {
-                state = .failed("\(error.localizedDescription)")
+                self?.state = .failed(error.localizedDescription)
             }
         }
+    }
+
+    /// nonisolated: runs on the cooperative pool, not the main actor.
+    private nonisolated static func transfer(
+        entry: ModelCatalog.Entry,
+        modelsDir: URL,
+        progress: @escaping @Sendable (Double) -> Void
+    ) async throws -> String {
+        let destination = entry.destinationURL(modelsDir: modelsDir)
+        try FileManager.default.createDirectory(at: modelsDir, withIntermediateDirectories: true)
+
+        let (bytes, response) = try await URLSession.shared.bytes(from: entry.sourceURL)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw URLError(.badServerResponse)
+        }
+        let total = Double(http.expectedContentLength)
+
+        let tmp = modelsDir.appendingPathComponent(entry.fileName + ".partial")
+        FileManager.default.createFile(atPath: tmp.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: tmp)
+
+        var buffer = Data(); buffer.reserveCapacity(1 << 20)
+        var written: Int64 = 0
+        do {
+            for try await byte in bytes {
+                buffer.append(byte)
+                if buffer.count >= 1 << 20 { // flush + progress per MiB
+                    try handle.write(contentsOf: buffer)
+                    written += Int64(buffer.count)
+                    buffer.removeAll(keepingCapacity: true)
+                    if total > 0 { progress(Double(written) / total) }
+                }
+            }
+            try handle.write(contentsOf: buffer)
+            try handle.close()
+        } catch {
+            try? handle.close()
+            throw error
+        }
+
+        if FileManager.default.fileExists(atPath: destination.path) {
+            try FileManager.default.removeItem(at: destination)
+        }
+        try FileManager.default.moveItem(at: tmp, to: destination)
+        return destination.path
     }
 }
 ```
@@ -445,7 +464,7 @@ In `app/Sources/VoiceInject/AppModel.swift`, add stored properties:
     )
 ```
 
-Extend the existing `onErrorEvent` fan-out from #30 — replace its closure body with:
+Extend the existing `onErrorEvent` fan-out from #30 — replace the whole closure assignment (signature included: `stage` is now used) with:
 
 ```swift
         client.onErrorEvent = { [weak self] stage, message in
@@ -475,6 +494,12 @@ Add a config-refresh helper and call it where #30's plan refreshes `maxRecordMs`
 
 ```swift
         refreshConfigMirror()
+```
+
+Also update #30's call site inside `onPhaseChange` to use the merged method:
+
+```swift
+            if phase == .idle { self?.refreshConfigMirror() }
 ```
 
 - [ ] **Step 2: Write the view**

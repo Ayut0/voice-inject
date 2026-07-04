@@ -383,8 +383,8 @@ protocol DaemonTransport: AnyObject {
 
     private(set) var phase: Phase          // #30's HUD observes this
     private(set) var lastError: ErrorInfo? // #30 flashes it, #32 lists it
-    var onTranscript: ((TranscriptPayload) -> Void)?           // #31 appends history
-    var onErrorEvent: ((_ stage: String, _ message: String) -> Void)? // #32 checklist
+    var onTranscript: (@MainActor (TranscriptPayload) -> Void)?           // #31 appends history
+    var onErrorEvent: (@MainActor (_ stage: String, _ message: String) -> Void)? // #32 checklist
 
     init(transport: DaemonTransport)
     func send<T: Decodable>(_ name: String, data: (some Encodable)?, expecting: T.Type) async throws -> T
@@ -555,10 +555,11 @@ final class DaemonClient {
     private(set) var phase: Phase = .disconnected
     private(set) var lastError: ErrorInfo?
 
-    /// Hook for the History feature (issue #31).
-    var onTranscript: ((TranscriptPayload) -> Void)?
+    /// Hook for the History feature (issue #31). @MainActor closure
+    /// types keep these callbacks valid under Swift 6 strict concurrency.
+    var onTranscript: (@MainActor (TranscriptPayload) -> Void)?
     /// Hook for the first-run checklist (issue #32).
-    var onErrorEvent: ((_ stage: String, _ message: String) -> Void)?
+    var onErrorEvent: (@MainActor (_ stage: String, _ message: String) -> Void)?
 
     private let transport: DaemonTransport
     private var lines = LineBuffer()

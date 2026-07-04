@@ -292,7 +292,7 @@ git commit -m "Add HUD SwiftUI view"
 - Consumes: `HUDState`, `HUDView` (Tasks 1–2); `DaemonClient`, `AppModel` (#29)
 - Produces:
   - **One addition to #29's `DaemonClient` surface:** `var onPhaseChange: ((Phase) -> Void)?` — fired whenever `phase` is assigned a new value
-  - `@MainActor final class HUDPanelController { init(); func apply(_ display: HUDDisplay, maxRecordMs: Int64); func scheduleErrorExpiry(after: TimeInterval, tick: @escaping () -> Void) }`
+  - `@MainActor final class HUDPanelController { init(); func apply(_ display: HUDDisplay, maxRecordMs: Int64); func scheduleErrorExpiry(after: TimeInterval, tick: @escaping @MainActor () -> Void) }`
   - **Convention for issue #32:** `AppModel` is the sole owner of `client.onErrorEvent` and `client.onPhaseChange`; it fans out to features. #32 must hook into `AppModel`, not set `client.onErrorEvent` itself.
 
 - [ ] **Step 1: Add the phase callback to `DaemonClient`**
@@ -301,8 +301,10 @@ In `app/Sources/VoiceInject/DaemonClient.swift`, add alongside the other hooks:
 
 ```swift
     /// Fired on every phase transition. Owned by AppModel (fan-out).
-    var onPhaseChange: ((Phase) -> Void)?
+    var onPhaseChange: (@MainActor (Phase) -> Void)?
 ```
+
+(The `@MainActor` closure type matches the `onTranscript`/`onErrorEvent` declarations in #29 and keeps all three hooks correct under Swift 6 strict concurrency.)
 
 and change the three phase assignments in `handle(_:)` to route through one helper; replace:
 
@@ -467,6 +469,8 @@ Add to the end of `init()`:
             // Issue #32 extends this fan-out with its checklist hook.
         }
 ```
+
+Also add `refreshMaxRecordMs()` in `startDaemon()` immediately after `daemonStatus = .running` — the daemon's startup `idle` event fires before the app connects (#28's bus drops events with no subscribers), so without this the first recording's bar would use the hardcoded 60 s default instead of the configured max. (If issue #32 has landed, its `refreshConfigMirror()` already does this — skip the duplicate call.)
 
 Add the two helpers to `AppModel`:
 
