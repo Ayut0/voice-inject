@@ -109,7 +109,7 @@ v1 command set (deliberately minimal): `getConfig`, `setConfig`, `status` (retur
 
 - **Daemon child exits unexpectedly** → app's `terminationHandler` fires; show a non-modal "Daemon stopped — Restart?" banner and auto-restart once. If it dies again within 10 s, stop retrying and surface the last stderr lines (no unbounded crash loop).
 - **Stale socket** → daemon deletes and rebinds the socket path at startup; app retries connect ~2 s before declaring failure.
-- **Startup pre-checks fail** (existing model-file and accessibility checks) → reported as `error` events to the connected client; routed to the Phase 5 checklist UI (plain alert until then). CLI-only behavior unchanged (prints to terminal).
+- **Startup pre-checks fail** (existing model-file and accessibility checks) → the daemon keeps its fail-fast exit (unchanged from today); the app captures the child's stderr and surfaces it in the failure banner and the Phase 5 Setup checklist, whose own probes independently cover the same dependencies. *(Amended during implementation planning: originally these were to be re-reported as `error` events to the connected client, but fail-fast + captured stderr delivers the same user outcome without changing tested daemon startup behavior.)* CLI-only behavior unchanged (prints to terminal).
 - **Malformed socket line** → both sides skip the line and log; never disconnect over one bad line.
 - **No client connected** → daemon behaves exactly as today.
 
