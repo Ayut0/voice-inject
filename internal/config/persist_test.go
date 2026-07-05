@@ -34,6 +34,39 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	}
 }
 
+func TestSaveToEnforces600OnPreExistingFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+
+	// Create file with loose permissions (0644)
+	if err := os.WriteFile(path, []byte("placeholder"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Verify initial permissions are 0644
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat before: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o644 {
+		t.Errorf("initial file mode = %o, want 644", perm)
+	}
+
+	// Save config to the same path
+	cfg := Default()
+	if err := cfg.SaveTo(path); err != nil {
+		t.Fatalf("SaveTo: %v", err)
+	}
+
+	// Verify permissions are now 0600
+	info, err = os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat after: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Errorf("file mode = %o, want 600", perm)
+	}
+}
+
 func TestLoadFromMissingFileReturnsDefaults(t *testing.T) {
 	got, err := LoadFrom(filepath.Join(t.TempDir(), "nope.json"))
 	if err != nil {
