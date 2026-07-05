@@ -7,7 +7,9 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -151,5 +153,106 @@ func TestServerShutdownCommand(t *testing.T) {
 	case <-shutdownCalled:
 	case <-time.After(2 * time.Second):
 		t.Error("onShutdown was not called")
+	}
+}
+
+// TestServerConcurrentPublishAndDisconnectStress exercises the race that
+// Bug 1 lived in: the event forwarder can be mid-select (about to send
+// on the per-connection out channel) at the exact moment the connection
+// tears down and out is closed. Before the fix, closing done did not
+// guarantee the forwarder had already exited before out was closed, so
+// this race could panic with "send on closed channel" and crash the
+// whole daemon process. Run with -race (and ideally -count=N) to build
+// confidence there is no flake.
+func TestServerConcurrentPublishAndDisconnectStress(t *testing.T) {
+	_, bus, path := startTestServer(t, nil, nil)
+
+	runtime.GC()
+	time.Sleep(20 * time.Millisecond)
+	baseline := runtime.NumGoroutine()
+
+	const iterations = 100
+	for i := 0; i < iterations; i++ {
+		conn, err := net.Dial("unix", path)
+		if err != nil {
+			t.Fatalf("iteration %d: dial: %v", i, err)
+		}
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			bus.Publish(StateEvent(EventRecording))
+		}()
+		go func() {
+			defer wg.Done()
+			conn.Close()
+		}()
+		wg.Wait()
+	}
+
+	// A crash (panic) anywhere above would already have failed the
+	// test process. As a secondary sanity check, confirm the server
+	// eventually cleans up every one of these short-lived connections
+	// rather than leaking their goroutines.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		runtime.GC()
+		n := runtime.NumGoroutine()
+		if n <= baseline+2 { // small tolerance for background runtime activity
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("goroutines did not settle after stress loop: baseline=%d have=%d", baseline, n)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// TestServerHungClientTriggersWriteTimeoutAndCleansUp verifies the fix
+// for Bug 2: a client that stops reading must not permanently wedge the
+// server. Before the fix, the reader's response send (out <- respLine)
+// had no escape once out's buffer filled from a stalled writer, so the
+// reader goroutine, its bus subscription, and conn were never cleaned
+// up. Here we never read from the client side and flood the bus with
+// events until the server's write deadline fires, then confirm the
+// per-connection goroutines (writer, forwarder, reader) exit and the
+// bus subscription is released, observed via the process's goroutine
+// count returning to baseline.
+func TestServerHungClientTriggersWriteTimeoutAndCleansUp(t *testing.T) {
+	_, bus, path := startTestServer(t, nil, nil)
+
+	runtime.GC()
+	time.Sleep(20 * time.Millisecond)
+	baseline := runtime.NumGoroutine()
+
+	conn, err := net.Dial("unix", path)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	// Deliberately never read from conn from here on: this simulates a
+	// hung/buggy client and is the whole point of the test.
+
+	// Give the server a moment to register the subscription, then
+	// flood the bus so the per-connection out channel (and the kernel
+	// socket buffer, since nothing drains it) both fill, forcing the
+	// server's next conn.Write to block until the write deadline
+	// fires.
+	time.Sleep(50 * time.Millisecond)
+	for i := 0; i < 20000; i++ {
+		bus.Publish(StateEvent(EventRecording))
+	}
+
+	deadline := time.Now().Add(writeTimeout + 5*time.Second)
+	for {
+		runtime.GC()
+		if n := runtime.NumGoroutine(); n <= baseline+2 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("goroutines did not return to baseline (%d) after write timeout: have %d", baseline, runtime.NumGoroutine())
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
