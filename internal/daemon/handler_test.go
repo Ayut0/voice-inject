@@ -68,15 +68,29 @@ func TestHandlerSetConfigAppliesAndValidates(t *testing.T) {
 }
 
 func TestHandlerStatus(t *testing.T) {
-	h, _, current, _ := newTestHandler(t)
-	current.Store(int32(state.Recording))
-	resp, _ := h(ipc.Command{Type: ipc.TypeCmd, ID: 3, Name: ipc.CmdStatus})
-	data, ok := resp.Data.(map[string]string)
-	if !ok {
-		t.Fatalf("data is %T, want map[string]string", resp.Data)
+	tests := []struct {
+		name      string
+		setState  state.State
+		wantState string
+	}{
+		{"idle", state.Idle, "idle"},
+		{"recording", state.Recording, "recording"},
+		{"transcribing", state.Transcribing, "transcribing"},
+		{"injecting collapses to transcribing", state.Injecting, "transcribing"},
 	}
-	if data["state"] != "recording" || data["version"] != Version {
-		t.Errorf("status = %v", data)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h, _, current, _ := newTestHandler(t)
+			current.Store(int32(tt.setState))
+			resp, _ := h(ipc.Command{Type: ipc.TypeCmd, ID: 3, Name: ipc.CmdStatus})
+			data, ok := resp.Data.(map[string]string)
+			if !ok {
+				t.Fatalf("data is %T, want map[string]string", resp.Data)
+			}
+			if data["state"] != tt.wantState || data["version"] != Version {
+				t.Errorf("status = %v, want state=%q", data, tt.wantState)
+			}
+		})
 	}
 }
 
