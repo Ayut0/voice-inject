@@ -99,6 +99,9 @@ func (c Config) ApplyPatch(raw []byte) (Config, error) {
 	if p.MaxSymbolRatio != nil {
 		c.MaxSymbolRatio = *p.MaxSymbolRatio
 	}
+	if c.MinTextLength > c.MaxTextLength {
+		return Config{}, fmt.Errorf("minTextLength (%d) must be <= maxTextLength (%d)", c.MinTextLength, c.MaxTextLength)
+	}
 	return c, nil
 }
 

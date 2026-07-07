@@ -109,6 +109,12 @@ func TestApplyPatch(t *testing.T) {
 		}},
 		{"invalid lang rejected", `{"lang":"xx"}`, true, nil},
 		{"invalid json rejected", `{`, true, nil},
+		{"minTextLength above maxTextLength rejected", `{"minTextLength":6000}`, true, nil},
+		{"minTextLength equal to maxTextLength allowed", `{"minTextLength":5000}`, false, func(t *testing.T, c Config) {
+			if c.MinTextLength != 5000 {
+				t.Errorf("MinTextLength = %d, want 5000", c.MinTextLength)
+			}
+		}},
 		{"unknown fields ignored", `{"bogus":true}`, false, func(t *testing.T, c Config) {
 			if c != Default() {
 				t.Error("config changed by unknown field")
