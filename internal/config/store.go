@@ -24,3 +24,17 @@ func (s *Store) Set(cfg Config) {
 	defer s.mu.Unlock()
 	s.cfg = cfg
 }
+
+// Mutate atomically applies fn to the current config and stores the result.
+// fn returning an error leaves the store unchanged, so concurrent callers
+// (e.g. two setConfig commands) can't race a Get/Set pair and lose an update.
+func (s *Store) Mutate(fn func(Config) (Config, error)) (Config, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	updated, err := fn(s.cfg)
+	if err != nil {
+		return Config{}, err
+	}
+	s.cfg = updated
+	return updated, nil
+}

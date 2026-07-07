@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"sync"
 	"testing"
 )
@@ -28,4 +29,42 @@ func TestStoreConcurrentAccess(t *testing.T) {
 		go func() { defer wg.Done(); _ = s.Get() }()
 	}
 	wg.Wait()
+}
+
+func TestStoreMutateIsAtomic(t *testing.T) {
+	// Regression test: concurrent Get-then-Set pairs (the pre-fix setConfig
+	// pattern) lose updates under -race; Mutate must not.
+	s := NewStore(Default())
+	const n = 100
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func() {
+			defer wg.Done()
+			if _, err := s.Mutate(func(c Config) (Config, error) {
+				c.MinTextLength++
+				return c, nil
+			}); err != nil {
+				t.Errorf("Mutate: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+	if got := s.Get().MinTextLength; got != Default().MinTextLength+n {
+		t.Errorf("MinTextLength = %d, want %d (lost update)", got, Default().MinTextLength+n)
+	}
+}
+
+func TestStoreMutateErrorLeavesUnchanged(t *testing.T) {
+	s := NewStore(Default())
+	wantErr := errors.New("boom")
+	_, err := s.Mutate(func(c Config) (Config, error) {
+		return Config{}, wantErr
+	})
+	if err != wantErr {
+		t.Fatalf("err = %v, want %v", err, wantErr)
+	}
+	if got := s.Get(); got != Default() {
+		t.Errorf("store mutated despite fn error: %+v", got)
+	}
 }

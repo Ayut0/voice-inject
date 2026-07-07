@@ -36,11 +36,12 @@ func newHandler(store *config.Store, current *atomic.Int32, cancel context.Cance
 			return ipc.OKResponse(cmd.ID, store.Get().ToWire()), false
 
 		case ipc.CmdSetConfig:
-			updated, err := store.Get().ApplyPatch(cmd.Data)
+			updated, err := store.Mutate(func(cfg config.Config) (config.Config, error) {
+				return cfg.ApplyPatch(cmd.Data)
+			})
 			if err != nil {
 				return ipc.ErrResponse(cmd.ID, err.Error()), false
 			}
-			store.Set(updated)
 			if err := save(updated); err != nil {
 				logger.Printf("[ipc] config save failed: %v", err)
 				return ipc.ErrResponse(cmd.ID, "applied but not saved: "+err.Error()), false
