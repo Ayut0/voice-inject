@@ -2,3 +2,4 @@
 docs
 /voice-inject
 .claude/settings.local.json
+.superpowers/
