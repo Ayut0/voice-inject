@@ -3,3 +3,5 @@ docs
 /voice-inject
 .claude/settings.local.json
 .superpowers/
+app/.build
+app/VoiceInject.app
