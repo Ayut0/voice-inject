@@ -37,16 +37,7 @@ struct SettingsView: View {
                     Text("Japanese").tag("ja")
                 }
 
-                LabeledContent("Model") {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(modelDisplayName(cfg.model))
-                        Text(cfg.model)
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                }
+                LabeledContent("Model", value: modelDisplayName(cfg.model))
                 Button("Change Model…") { isChoosingModel = true }
                     .fileImporter(isPresented: $isChoosingModel, allowedContentTypes: [.data]) { result in
                         if case .success(let url) = result {
