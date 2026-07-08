@@ -25,12 +25,20 @@ final class DaemonClient {
     /// Hook for the first-run checklist (issue #32).
     var onErrorEvent: (@MainActor (_ stage: String, _ message: String) -> Void)?
 
-    private let transport: DaemonTransport
+    private var transport: DaemonTransport
     private var lines = LineBuffer()
     private var nextID: Int64 = 1
     private var pending: [Int64: CheckedContinuation<DaemonResponse, Error>] = [:]
 
     init(transport: DaemonTransport) {
+        self.transport = transport
+        rebind(transport: transport)
+    }
+
+    // MARK: - Reconnection support (AppModel owns transport lifecycle)
+
+    func rebind(transport: DaemonTransport) {
+        handleClose(nil) // fail pending requests, phase = .disconnected
         self.transport = transport
         transport.onReceive = { [weak self] chunk in self?.receive(chunk) }
         transport.onClose = { [weak self] error in self?.handleClose(error) }
