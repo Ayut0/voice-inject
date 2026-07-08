@@ -1,4 +1,20 @@
 import SwiftUI
+import UniformTypeIdentifiers
+
+/// Converts a whisper.cpp ggml model filename into a friendlier label,
+/// e.g. "ggml-base.en.bin" -> "base (English)". Falls back to the bare
+/// filename for anything that doesn't follow the ggml-<name>.bin
+/// convention (custom models aren't required to follow it).
+func modelDisplayName(_ path: String) -> String {
+    let filename = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
+    guard filename.hasPrefix("ggml-") else { return filename }
+    var name = String(filename.dropFirst("ggml-".count))
+    if name.hasSuffix(".en") {
+        name.removeLast(3)
+        name += " (English)"
+    }
+    return name
+}
 
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
@@ -6,6 +22,7 @@ struct SettingsView: View {
     @State private var config: DaemonConfig?
     @State private var loadError: String?
     @State private var saveState: SaveState = .idle
+    @State private var isChoosingModel = false
 
     enum SaveState: Equatable { case idle, saving, saved, failed(String) }
 
@@ -20,11 +37,22 @@ struct SettingsView: View {
                     Text("Japanese").tag("ja")
                 }
 
-                TextField("Whisper model path", text: Binding(
-                    get: { cfg.model },
-                    set: { cfg.model = $0; config = cfg }
-                ))
-                .font(.system(.body, design: .monospaced))
+                LabeledContent("Model") {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(modelDisplayName(cfg.model))
+                        Text(cfg.model)
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+                Button("Change Model…") { isChoosingModel = true }
+                    .fileImporter(isPresented: $isChoosingModel, allowedContentTypes: [.data]) { result in
+                        if case .success(let url) = result {
+                            config?.model = url.path
+                        }
+                    }
 
                 Stepper("Max recording: \(cfg.maxRecordMs / 1000)s",
                         value: Binding(
