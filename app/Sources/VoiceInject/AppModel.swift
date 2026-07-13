@@ -17,11 +17,24 @@ final class AppModel {
     private var policy = RestartPolicy()
     private var pendingTransport: UnixSocketTransport?
 
+    private let hud = HUDPanelController()
+    private var hudState = HUDState()
+    private var maxRecordMs: Int64 = 60_000 // refreshed from getConfig
+
     init() {
         let transport = UnixSocketTransport(path: Self.socketPath())
         client = DaemonClient(transport: transport)
         // Transport connects in startDaemon(), after the child binds the socket.
         self.pendingTransport = transport
+
+        client.onPhaseChange = { [weak self] phase in
+            self?.hudInput { $0.phaseChanged(phase, now: Date()) }
+            if phase == .idle { self?.refreshMaxRecordMs() }
+        }
+        client.onErrorEvent = { [weak self] _, message in
+            self?.hudInput { $0.errorOccurred(message: message, now: Date()) }
+            // Issue #32 extends this fan-out with its checklist hook.
+        }
     }
 
     static func socketPath() -> String {
@@ -58,6 +71,7 @@ final class AppModel {
         }
         process = proc
         daemonStatus = .running
+        refreshMaxRecordMs()
         // Give the daemon a beat to bind the socket, then connect.
         let transport = pendingTransport
         Task { @MainActor in
@@ -88,5 +102,24 @@ final class AppModel {
         client.rebind(transport: transport)
         pendingTransport = transport
         startDaemon()
+    }
+
+    private func hudInput(_ mutate: (inout HUDState) -> Void) {
+        mutate(&hudState)
+        hud.apply(hudState.display, maxRecordMs: maxRecordMs)
+        if case .errorFlash = hudState.display {
+            hud.scheduleErrorExpiry(after: HUDState.errorFlashDuration) { [weak self] in
+                self?.hudInput { $0.tick(now: Date()) }
+            }
+        }
+    }
+
+    /// The bar max tracks live config (user may change it in Settings).
+    private func refreshMaxRecordMs() {
+        Task { @MainActor in
+            if let cfg = try? await client.getConfig() {
+                maxRecordMs = cfg.maxRecordMs
+            }
+        }
     }
 }
