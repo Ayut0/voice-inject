@@ -71,12 +71,12 @@ final class AppModel {
         }
         process = proc
         daemonStatus = .running
-        refreshMaxRecordMs()
         // Give the daemon a beat to bind the socket, then connect.
         let transport = pendingTransport
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 300_000_000)
             transport?.connect()
+            refreshMaxRecordMs()
         }
     }
 
