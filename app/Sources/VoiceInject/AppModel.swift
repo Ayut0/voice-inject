@@ -63,6 +63,7 @@ final class AppModel {
     }
 
     func startDaemon() {
+        if process?.isRunning == true { return }
         let proc = DaemonProcess(binaryURL: Self.daemonBinaryURL())
         proc.onTermination = { [weak self] code, stderr in
             Task { @MainActor in self?.daemonDied(code: code, stderr: stderr) }
@@ -99,13 +100,23 @@ final class AppModel {
         }
     }
 
-    /// Manual restart from the failure banner: resets the policy.
+    /// Manual restart from the failure banner: resets the policy and stops
+    /// the current daemon before spawning its replacement. The stop is
+    /// intentional, so `DaemonProcess` suppresses `onTermination` for it -
+    /// `daemonDied()` is never invoked, and no `RestartPolicy` strike is
+    /// consumed.
     func restartDaemon() {
         policy = RestartPolicy()
-        let transport = UnixSocketTransport(path: Self.socketPath())
-        client.rebind(transport: transport)
-        pendingTransport = transport
-        startDaemon()
+        Task { @MainActor in
+            if let proc = process, proc.isRunning {
+                await proc.stop()
+            }
+            process = nil
+            let transport = UnixSocketTransport(path: Self.socketPath())
+            client.rebind(transport: transport)
+            pendingTransport = transport
+            startDaemon()
+        }
     }
 
     private func hudInput(_ mutate: (inout HUDState) -> Void) {
