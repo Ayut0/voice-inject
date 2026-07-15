@@ -34,7 +34,7 @@
   - `record` is a no-op when `recordingEnabled` is false
   - `static func defaultFileURL() -> URL` — the Application Support path
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `app/Tests/VoiceInjectTests/HistoryStoreTests.swift`:
 
@@ -129,12 +129,12 @@ final class HistoryStoreTests: XCTestCase {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd app && swift test --filter HistoryStoreTests`
 Expected: FAIL — `HistoryStore` undefined.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `app/Sources/VoiceInject/HistoryStore.swift`:
 
@@ -255,12 +255,12 @@ final class HistoryStore {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd app && swift test --filter HistoryStoreTests`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/Sources/VoiceInject/HistoryStore.swift app/Tests/VoiceInjectTests/HistoryStoreTests.swift
@@ -282,7 +282,7 @@ git commit -m "Add JSONL-backed history store with privacy toggle"
 
 Note the fan-out convention from issue #30's plan: `AppModel` owns all `DaemonClient` callbacks. `onTranscript` has no other consumer, so wiring it directly here is consistent with that rule.
 
-- [ ] **Step 1: Add the store to `AppModel`**
+- [x] **Step 1: Add the store to `AppModel`**
 
 In `app/Sources/VoiceInject/AppModel.swift`, add the property:
 
@@ -300,7 +300,7 @@ and add to the end of `init()`:
 
 (`record` itself checks `recordingEnabled`, so the gate lives in exactly one place.)
 
-- [ ] **Step 2: Write the view**
+- [x] **Step 2: Write the view**
 
 `app/Sources/VoiceInject/HistoryView.swift`:
 
@@ -370,7 +370,7 @@ struct HistoryView: View {
 }
 ```
 
-- [ ] **Step 3: Add the tab to `MainWindow`**
+- [x] **Step 3: Add the tab to `MainWindow`**
 
 In `app/Sources/VoiceInject/MainWindow.swift`, replace:
 
@@ -394,7 +394,7 @@ with:
             }
 ```
 
-- [ ] **Step 4: Compile and run all tests**
+- [x] **Step 4: Compile and run all tests**
 
 Run: `cd app && swift build && swift test`
 Expected: PASS
@@ -411,7 +411,7 @@ Rebuild: `app/make-app.sh && open app/VoiceInject.app`, then:
 6. Clear → list empties and the JSONL file is gone.
 7. `swift test` passes.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/Sources/VoiceInject/HistoryView.swift app/Sources/VoiceInject/AppModel.swift app/Sources/VoiceInject/MainWindow.swift
