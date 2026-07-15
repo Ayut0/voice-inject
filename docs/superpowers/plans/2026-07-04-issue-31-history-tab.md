@@ -399,7 +399,7 @@ with:
 Run: `cd app && swift build && swift test`
 Expected: PASS
 
-- [ ] **Step 5: Manual acceptance (issue #31 criteria)**
+- [x] **Step 5: Manual acceptance (issue #31 criteria)**
 
 Rebuild: `app/make-app.sh && open app/VoiceInject.app`, then:
 
