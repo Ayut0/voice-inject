@@ -102,4 +102,17 @@ final class DaemonClientTests: XCTestCase {
         transport.push("garbage\n{\"type\":\"event\",\"name\":\"idle\"}\n")
         XCTAssertEqual(client.phase, .idle)
     }
+
+    func testPhaseChangeCallbackFiresOncePerTransition() {
+        let transport = MockTransport()
+        let client = DaemonClient(transport: transport)
+        var seen: [DaemonClient.Phase] = []
+        client.onPhaseChange = { seen.append($0) }
+
+        transport.push("{\"type\":\"event\",\"name\":\"idle\"}\n")
+        transport.push("{\"type\":\"event\",\"name\":\"idle\"}\n") // duplicate: no callback
+        transport.push("{\"type\":\"event\",\"name\":\"recording\"}\n")
+
+        XCTAssertEqual(seen, [.idle, .recording])
+    }
 }

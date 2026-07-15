@@ -24,6 +24,8 @@ final class DaemonClient {
     var onTranscript: (@MainActor (TranscriptPayload) -> Void)?
     /// Hook for the first-run checklist (issue #32).
     var onErrorEvent: (@MainActor (_ stage: String, _ message: String) -> Void)?
+    /// Fired on every phase transition. Owned by AppModel (fan-out).
+    var onPhaseChange: (@MainActor (Phase) -> Void)?
 
     private var transport: DaemonTransport
     private var lines = LineBuffer()
@@ -96,9 +98,9 @@ final class DaemonClient {
 
     func handle(_ message: IncomingMessage) {
         switch message {
-        case .event(.idle): phase = .idle
-        case .event(.recording): phase = .recording
-        case .event(.transcribing): phase = .transcribing
+        case .event(.idle): setPhase(.idle)
+        case .event(.recording): setPhase(.recording)
+        case .event(.transcribing): setPhase(.transcribing)
         case .event(.transcript(let payload)):
             onTranscript?(payload)
         case .event(.error(let stage, let message)):
@@ -114,11 +116,17 @@ final class DaemonClient {
     }
 
     func handleClose(_ error: Error?) {
-        phase = .disconnected
+        setPhase(.disconnected)
         let waiting = pending
         pending.removeAll()
         for (_, cont) in waiting {
             cont.resume(throwing: ClientError.disconnected)
         }
+    }
+
+    private func setPhase(_ new: Phase) {
+        guard new != phase else { return }
+        phase = new
+        onPhaseChange?(new)
     }
 }
