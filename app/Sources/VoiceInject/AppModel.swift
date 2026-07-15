@@ -11,6 +11,7 @@ final class AppModel {
     }
 
     let client: DaemonClient
+    let history = HistoryStore(fileURL: HistoryStore.defaultFileURL())
     private(set) var daemonStatus: DaemonStatus = .starting
 
     private var process: DaemonProcess?
@@ -34,6 +35,9 @@ final class AppModel {
         client.onErrorEvent = { [weak self] _, message in
             self?.hudInput { $0.errorOccurred(message: message, now: Date()) }
             // Issue #32 extends this fan-out with its checklist hook.
+        }
+        client.onTranscript = { [weak self] payload in
+            self?.history.record(payload)
         }
     }
 

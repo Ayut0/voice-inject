@@ -9,7 +9,9 @@ struct MainWindow: View {
             TabView {
                 SettingsView()
                     .tabItem { Label("Settings", systemImage: "gearshape") }
-                // Issue #31 adds History here; issue #32 adds Setup.
+                HistoryView()
+                    .tabItem { Label("History", systemImage: "clock") }
+                // Issue #32 adds Setup here.
             }
         }
         .frame(minWidth: 480, minHeight: 360)
