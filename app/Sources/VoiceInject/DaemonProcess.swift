@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// Spawns and supervises the Go daemon as a child process. The stdin
@@ -10,6 +11,7 @@ final class DaemonProcess {
     private var process: Process?
     private var stdinPipe: Pipe?
     private let stderrTail = StderrTail()
+    private let stopFlag = StopFlag()
 
     init(binaryURL: URL) {
         self.binaryURL = binaryURL
@@ -34,7 +36,8 @@ final class DaemonProcess {
         }
         p.terminationHandler = { [weak self] proc in
             stderr.fileHandleForReading.readabilityHandler = nil
-            self?.onTermination?(proc.terminationStatus, tail.snapshot())
+            guard let self, !self.stopFlag.get() else { return }
+            self.onTermination?(proc.terminationStatus, tail.snapshot())
         }
 
         try p.run()
@@ -42,13 +45,44 @@ final class DaemonProcess {
         stdinPipe = stdin // hold the reference; never write, never close while running
     }
 
-    func stop() {
-        // Closing stdin asks the managed daemon to exit gracefully.
+    /// Requests a graceful stop (closes stdin - the `-managed` contract), then
+    /// escalates to SIGKILL if the child hasn't exited within `timeout`. Never
+    /// fires `onTermination` for this intentional exit. Non-blocking: waits via
+    /// `Task.sleep` polling, not `waitUntilExit()`, so it's safe to await from
+    /// `@MainActor` code.
+    ///
+    /// Does not clear `process`/`stdinPipe`: this is a `nonisolated` async
+    /// function, so code after `await` may resume on a different thread than
+    /// the caller's - mutating those properties here would race with the
+    /// caller's own access to them. The caller drops its reference instead.
+    func stop(timeout: TimeInterval = 2.0) async {
+        guard let proc = process, proc.isRunning else { return }
+        stopFlag.set()
         try? stdinPipe?.fileHandleForWriting.close()
-        process?.waitUntilExit()
-        process = nil
-        stdinPipe = nil
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while proc.isRunning && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        if proc.isRunning {
+            Darwin.kill(proc.processIdentifier, SIGKILL)
+            let killDeadline = Date().addingTimeInterval(0.5)
+            while proc.isRunning && Date() < killDeadline {
+                try? await Task.sleep(nanoseconds: 20_000_000)
+            }
+        }
     }
+}
+
+/// Thread-safe: set once by stop() (on the caller's thread) and read from
+/// the termination handler, which Foundation always fires on an arbitrary
+/// background thread - a real cross-thread access, same as StderrTail below.
+private final class StopFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+
+    func set() { lock.lock(); value = true; lock.unlock() }
+    func get() -> Bool { lock.lock(); defer { lock.unlock() }; return value }
 }
 
 /// Thread-safe rolling buffer of the last 4 KiB of stderr.
