@@ -7,6 +7,8 @@ final class AppModel {
         case starting
         case running
         case restarting
+        case stopping
+        case stopped
         case failed(stderr: String)
     }
 
@@ -123,6 +125,28 @@ final class AppModel {
             process = nil
             rebindTransportAndStart()
         }
+    }
+
+    /// Manual stop from the running banner: treated as intentional, same
+    /// as `restartDaemon()`'s stop - `DaemonProcess.stop()` suppresses its
+    /// own `onTermination`, so `daemonDied()` never fires and no
+    /// `RestartPolicy` strike is consumed.
+    func stopDaemon() {
+        guard let proc = process, proc.isRunning else { return }
+        daemonStatus = .stopping
+        Task { @MainActor in
+            await proc.stop()
+            process = nil
+            daemonStatus = .stopped
+        }
+    }
+
+    /// Manual start from the stopped banner. Only valid from .stopped -
+    /// the button that calls this is only shown in that state, but the
+    /// guard makes the method safe to call directly too.
+    func startDaemonManually() {
+        guard case .stopped = daemonStatus else { return }
+        rebindTransportAndStart()
     }
 
     /// Creates a fresh transport and rebinds the client to it, then starts
