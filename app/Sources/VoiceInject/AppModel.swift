@@ -103,12 +103,7 @@ final class AppModel {
         switch policy.decide(now: Date()) {
         case .restart:
             daemonStatus = .restarting
-            // Reconnect needs a fresh transport+client wiring; simplest
-            // correct v1: recreate transport and rebind callbacks.
-            let transport = UnixSocketTransport(path: Self.socketPath())
-            client.rebind(transport: transport)
-            pendingTransport = transport
-            startDaemon()
+            rebindTransportAndStart()
         case .giveUp:
             daemonStatus = .failed(stderr: stderr)
         }
@@ -126,11 +121,19 @@ final class AppModel {
                 await proc.stop()
             }
             process = nil
-            let transport = UnixSocketTransport(path: Self.socketPath())
-            client.rebind(transport: transport)
-            pendingTransport = transport
-            startDaemon()
+            rebindTransportAndStart()
         }
+    }
+
+    /// Creates a fresh transport and rebinds the client to it, then starts
+    /// the daemon. A fresh `UnixSocketTransport` is required on every
+    /// restart because it wraps a single-use `NWConnection` - once
+    /// cancelled/closed, the same instance can't reconnect.
+    private func rebindTransportAndStart() {
+        let transport = UnixSocketTransport(path: Self.socketPath())
+        client.rebind(transport: transport)
+        pendingTransport = transport
+        startDaemon()
     }
 
     /// Orderly shutdown for app termination: sets `isShuttingDown` first so
