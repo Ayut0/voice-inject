@@ -17,6 +17,7 @@ final class AppModel {
     private var process: DaemonProcess?
     private var policy = RestartPolicy()
     private var pendingTransport: UnixSocketTransport?
+    private(set) var isShuttingDown = false
 
     private let hud = HUDPanelController()
     private var hudState = HUDState()
@@ -47,12 +48,24 @@ final class AppModel {
     }
 
     /// Resolution order: env override (dev) → bundled binary → repo build.
+    ///
+    /// The bundled binary lives under `Contents/Resources/`, not
+    /// `Contents/MacOS/`: `CFBundleGetMainBundle()` identifies an
+    /// executable's bundle by walking up from its own path looking for the
+    /// `Foo.app/Contents/MacOS/<exe>` shape, regardless of whether `<exe>`
+    /// matches `CFBundleExecutable`. A `voice-inject` binary placed in
+    /// `Contents/MacOS/` alongside `VoiceInjectApp` therefore matches that
+    /// shape and inherits the app's own `CFBundleIdentifier` once it touches
+    /// any Cocoa/Carbon API (as the hotkey registration does) - so both
+    /// processes register with LaunchServices under the same identifier,
+    /// and an Apple Event `quit` addressed to that identifier can be
+    /// delivered to the daemon instead of the app (see #39).
     static func daemonBinaryURL() -> URL {
         if let env = ProcessInfo.processInfo.environment["VOICE_INJECT_BIN"] {
             return URL(fileURLWithPath: env)
         }
         let bundled = Bundle.main.bundleURL
-            .appendingPathComponent("Contents/MacOS/voice-inject")
+            .appendingPathComponent("Contents/Resources/voice-inject")
         if FileManager.default.isExecutableFile(atPath: bundled.path) {
             return bundled
         }
@@ -63,6 +76,7 @@ final class AppModel {
     }
 
     func startDaemon() {
+        if isShuttingDown { return }
         if process?.isRunning == true { return }
         let proc = DaemonProcess(binaryURL: Self.daemonBinaryURL())
         proc.onTermination = { [weak self] code, stderr in
@@ -116,6 +130,18 @@ final class AppModel {
             client.rebind(transport: transport)
             pendingTransport = transport
             startDaemon()
+        }
+    }
+
+    /// Orderly shutdown for app termination: sets `isShuttingDown` first so
+    /// `startDaemon()` can't respawn a replacement (whether via a racing
+    /// `daemonDied()` restart or a stray scene re-`.task`), then stops the
+    /// daemon via its graceful path. `DaemonProcess.stop()` suppresses its
+    /// own `onTermination`, so this never triggers `daemonDied()` either.
+    func shutdown() async {
+        isShuttingDown = true
+        if let proc = process, proc.isRunning {
+            await proc.stop()
         }
     }
 
