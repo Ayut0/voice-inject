@@ -4,6 +4,7 @@ import SwiftUI
 struct HistoryView: View {
     @Environment(AppModel.self) private var model
     @State private var copiedID: UUID?
+    @State private var hoveredID: UUID?
 
     var body: some View {
         @Bindable var history = model.history
@@ -13,7 +14,7 @@ struct HistoryView: View {
                 Toggle("Record history", isOn: $history.recordingEnabled)
                 Spacer()
                 Button("Clear", role: .destructive) { history.clear() }
-                    .disabled(history.entries.isEmpty)
+                    .disabled(historyClearDisabled(recordingEnabled: history.recordingEnabled, entriesIsEmpty: history.entries.isEmpty))
             }
             .padding(10)
 
@@ -37,15 +38,21 @@ struct HistoryView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Button {
+                        Button(copiedID == entry.id ? "Copied ✓" : "Copy") {
                             copy(entry)
-                        } label: {
-                            Image(systemName: copiedID == entry.id ? "checkmark" : "doc.on.doc")
                         }
-                        .buttonStyle(.borderless)
+                        .buttonStyle(.plain)
+                        .foregroundStyle(copiedID == entry.id ? Color.green : Color.secondary)
                         .help("Copy to clipboard")
                     }
-                    .padding(.vertical, 2)
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(hoveredID == entry.id ? Color.primary.opacity(0.04) : Color.clear)
+                    )
+                    .onHover { isHovered in hoveredID = isHovered ? entry.id : nil }
+                    .listRowSeparator(.hidden)
                 }
             }
         }
@@ -60,4 +67,8 @@ struct HistoryView: View {
             if copiedID == entry.id { copiedID = nil }
         }
     }
+}
+
+func historyClearDisabled(recordingEnabled: Bool, entriesIsEmpty: Bool) -> Bool {
+    !recordingEnabled || entriesIsEmpty
 }

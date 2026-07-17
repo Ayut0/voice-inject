@@ -145,4 +145,59 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(model.daemonStatus, .running, "the crash must still get its one automatic restart (spawn 3)")
         XCTAssertEqual(spawnCount(), 3)
     }
+
+    func testLoadConfigPopulatesConfig() async throws {
+        let transport = MockTransport()
+        let client = DaemonClient(transport: transport)
+        let model = AppModel(client: client)
+
+        async let load: Void = model.loadConfig()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        transport.push("{\"type\":\"resp\",\"id\":1,\"ok\":true,\"data\":{\"lang\":\"en\",\"model\":\"/m\",\"minRecordMs\":700,\"maxRecordMs\":60000,\"silenceTimeoutMs\":4000,\"minTextLength\":3,\"maxTextLength\":5000,\"camelCaseRule\":false,\"maxSymbolRatio\":0.5}}\n")
+
+        try await load
+        XCTAssertEqual(model.config?.lang, "en")
+        XCTAssertEqual(model.config?.maxRecordMs, 60_000)
+    }
+
+    func testSaveConfigUpdatesConfigOnSuccess() async throws {
+        let transport = MockTransport()
+        let client = DaemonClient(transport: transport)
+        let model = AppModel(client: client)
+
+        let newConfig = DaemonConfig(lang: "ja", model: "/m2", minRecordMs: 700, maxRecordMs: 45_000, silenceTimeoutMs: 3_000, minTextLength: 3, maxTextLength: 5_000, camelCaseRule: false, maxSymbolRatio: 0.5)
+
+        async let save: Void = model.saveConfig(newConfig)
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(transport.sent.count, 1)
+        XCTAssertTrue(String(data: transport.sent[0], encoding: .utf8)!.contains("\"name\":\"setConfig\""))
+        transport.push("{\"type\":\"resp\",\"id\":1,\"ok\":true}\n")
+
+        try await save
+        XCTAssertEqual(model.config, newConfig)
+    }
+
+    func testSaveConfigLeavesConfigUnchangedOnFailure() async throws {
+        let transport = MockTransport()
+        let client = DaemonClient(transport: transport)
+        let model = AppModel(client: client)
+
+        async let load: Void = model.loadConfig()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        transport.push("{\"type\":\"resp\",\"id\":1,\"ok\":true,\"data\":{\"lang\":\"en\",\"model\":\"/m\",\"minRecordMs\":700,\"maxRecordMs\":60000,\"silenceTimeoutMs\":4000,\"minTextLength\":3,\"maxTextLength\":5000,\"camelCaseRule\":false,\"maxSymbolRatio\":0.5}}\n")
+        try await load
+        let original = model.config
+
+        let badConfig = DaemonConfig(lang: "xx", model: "/m", minRecordMs: 700, maxRecordMs: 60_000, silenceTimeoutMs: 4_000, minTextLength: 3, maxTextLength: 5_000, camelCaseRule: false, maxSymbolRatio: 0.5)
+
+        async let save: Void = model.saveConfig(badConfig)
+        try await Task.sleep(nanoseconds: 50_000_000)
+        transport.push("{\"type\":\"resp\",\"id\":2,\"ok\":false,\"error\":\"unsupported language\"}\n")
+
+        do {
+            try await save
+            XCTFail("expected throw")
+        } catch { /* expected */ }
+        XCTAssertEqual(model.config, original)
+    }
 }

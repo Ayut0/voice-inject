@@ -23,17 +23,30 @@ final class AppModel {
 
     private let hud = HUDPanelController()
     private var hudState = HUDState()
-    private var maxRecordMs: Int64 = 60_000 // refreshed from getConfig
+    private(set) var config: DaemonConfig?
 
     init() {
         let transport = UnixSocketTransport(path: Self.socketPath())
         client = DaemonClient(transport: transport)
         // Transport connects in startDaemon(), after the child binds the socket.
         self.pendingTransport = transport
+        wireClientCallbacks()
+    }
 
+    /// Test-only entry point: skips daemon-process/transport setup so
+    /// config loading/saving can be exercised against a MockTransport-
+    /// backed client without a live daemon socket (see AppModelTests).
+    init(client: DaemonClient) {
+        self.client = client
+        wireClientCallbacks()
+    }
+
+    private func wireClientCallbacks() {
         client.onPhaseChange = { [weak self] phase in
             self?.hudInput { $0.phaseChanged(phase, now: Date()) }
-            if phase == .idle { self?.refreshMaxRecordMs() }
+            if phase == .idle {
+                Task { @MainActor [weak self] in try? await self?.loadConfig() }
+            }
         }
         client.onErrorEvent = { [weak self] _, message in
             self?.hudInput { $0.errorOccurred(message: message, now: Date()) }
@@ -42,6 +55,25 @@ final class AppModel {
         client.onTranscript = { [weak self] payload in
             self?.history.record(payload)
         }
+    }
+
+    func loadConfig() async throws {
+        config = try await client.getConfig()
+    }
+
+    func saveConfig(_ newConfig: DaemonConfig) async throws {
+        var patch = ConfigPatch()
+        patch.lang = newConfig.lang
+        patch.model = newConfig.model
+        patch.minRecordMs = newConfig.minRecordMs
+        patch.maxRecordMs = newConfig.maxRecordMs
+        patch.silenceTimeoutMs = newConfig.silenceTimeoutMs
+        patch.minTextLength = newConfig.minTextLength
+        patch.maxTextLength = newConfig.maxTextLength
+        patch.camelCaseRule = newConfig.camelCaseRule
+        patch.maxSymbolRatio = newConfig.maxSymbolRatio
+        try await client.setConfig(patch)
+        config = newConfig
     }
 
     static func socketPath() -> String {
@@ -97,7 +129,7 @@ final class AppModel {
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 300_000_000)
             transport?.connect()
-            refreshMaxRecordMs()
+            try? await loadConfig()
         }
     }
 
@@ -174,7 +206,7 @@ final class AppModel {
 
     private func hudInput(_ mutate: (inout HUDState) -> Void) {
         mutate(&hudState)
-        hud.apply(hudState.display, maxRecordMs: maxRecordMs)
+        hud.apply(hudState.display, maxRecordMs: config?.maxRecordMs ?? 60_000)
         if case .errorFlash = hudState.display {
             hud.scheduleErrorExpiry(after: HUDState.errorFlashDuration) { [weak self] in
                 self?.hudInput { $0.tick(now: Date()) }
@@ -182,12 +214,4 @@ final class AppModel {
         }
     }
 
-    /// The bar max tracks live config (user may change it in Settings).
-    private func refreshMaxRecordMs() {
-        Task { @MainActor in
-            if let cfg = try? await client.getConfig() {
-                maxRecordMs = cfg.maxRecordMs
-            }
-        }
-    }
 }

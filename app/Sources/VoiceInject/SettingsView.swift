@@ -19,7 +19,7 @@ func modelDisplayName(_ path: String) -> String {
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
 
-    @State private var config: DaemonConfig?
+    @State private var draft: DaemonConfig?
     @State private var loadError: String?
     @State private var saveState: SaveState = .idle
     @State private var isChoosingModel = false
@@ -28,43 +28,63 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            if var cfg = config {
-                Picker("Language", selection: Binding(
-                    get: { cfg.lang },
-                    set: { cfg.lang = $0; config = cfg }
-                )) {
-                    Text("English").tag("en")
-                    Text("Japanese").tag("ja")
-                }
+            if var cfg = draft {
+                Section {
+                    Picker("Language", selection: Binding(
+                        get: { cfg.lang },
+                        set: { cfg.lang = $0; draft = cfg }
+                    )) {
+                        Text("English").tag("en")
+                        Text("Japanese").tag("ja")
+                    }
+                    .pickerStyle(.segmented)
 
-                LabeledContent("Model", value: modelDisplayName(cfg.model))
-                Button("Change Model…") { isChoosingModel = true }
-                    .fileImporter(isPresented: $isChoosingModel, allowedContentTypes: [.data]) { result in
-                        if case .success(let url) = result {
-                            config?.model = url.path
+                    LabeledContent("Model", value: modelDisplayName(cfg.model))
+                    Button("Change Model…") { isChoosingModel = true }
+                        .fileImporter(isPresented: $isChoosingModel, allowedContentTypes: [.data]) { result in
+                            if case .success(let url) = result {
+                                draft?.model = url.path
+                            }
+                        }
+
+                    Stepper(value: Binding(
+                        get: { cfg.maxRecordMs },
+                        set: { cfg.maxRecordMs = $0; draft = cfg }
+                    ), in: 5_000...120_000, step: 5_000) {
+                        HStack {
+                            Text("Max recording")
+                            Spacer()
+                            Text("\(cfg.maxRecordMs / 1000)s")
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
                         }
                     }
 
-                Stepper("Max recording: \(cfg.maxRecordMs / 1000)s",
-                        value: Binding(
-                            get: { cfg.maxRecordMs },
-                            set: { cfg.maxRecordMs = $0; config = cfg }
-                        ), in: 5_000...120_000, step: 5_000)
-
-                Stepper("Silence timeout: \(cfg.silenceTimeoutMs / 1000)s",
-                        value: Binding(
-                            get: { cfg.silenceTimeoutMs },
-                            set: { cfg.silenceTimeoutMs = $0; config = cfg }
-                        ), in: 1_000...10_000, step: 1_000)
+                    Stepper(value: Binding(
+                        get: { cfg.silenceTimeoutMs },
+                        set: { cfg.silenceTimeoutMs = $0; draft = cfg }
+                    ), in: 1_000...10_000, step: 1_000) {
+                        HStack {
+                            Text("Silence timeout")
+                            Spacer()
+                            Text("\(cfg.silenceTimeoutMs / 1000)s")
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } header: {
+                    Text("CONFIGURATION")
+                }
 
                 HStack {
-                    Button("Save") { save(cfg) }
-                        .disabled(saveState == .saving)
+                    Spacer()
                     switch saveState {
                     case .saved: Text("Saved ✓").foregroundStyle(.green)
                     case .failed(let msg): Text(msg).foregroundStyle(.red)
                     default: EmptyView()
                     }
+                    Button("Save") { save(cfg) }
+                        .disabled(saveState == .saving)
                 }
             } else if let loadError {
                 Text("Could not load config: \(loadError)").foregroundStyle(.red)
@@ -73,6 +93,7 @@ struct SettingsView: View {
                 ProgressView("Loading config…")
             }
         }
+        .formStyle(.grouped)
         .padding()
         .task { await load() }
     }
@@ -80,7 +101,8 @@ struct SettingsView: View {
     private func load() async {
         loadError = nil
         do {
-            config = try await model.client.getConfig()
+            try await model.loadConfig()
+            draft = model.config
         } catch {
             loadError = "\(error)"
         }
@@ -90,13 +112,10 @@ struct SettingsView: View {
         saveState = .saving
         Task {
             do {
-                var patch = ConfigPatch()
-                patch.lang = cfg.lang
-                patch.model = cfg.model
-                patch.maxRecordMs = cfg.maxRecordMs
-                patch.silenceTimeoutMs = cfg.silenceTimeoutMs
-                try await model.client.setConfig(patch)
+                try await model.saveConfig(cfg)
                 saveState = .saved
+                try? await Task.sleep(nanoseconds: 1_600_000_000)
+                if saveState == .saved { saveState = .idle }
             } catch {
                 saveState = .failed("\(error)")
             }
