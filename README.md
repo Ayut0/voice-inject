@@ -127,6 +127,33 @@ The `inject` subcommand reads text from stdin and pastes it, useful for testing 
 echo "hello world" | ./voice-inject inject
 ```
 
+## macOS App (GUI)
+
+A SwiftUI app wraps the daemon in a window (status banner, Settings, and a transcript History tab) so you don't have to run `./voice-inject daemon` from a terminal.
+
+### Prerequisites
+
+- Everything under [Prerequisites](#prerequisites) above (the app bundles and launches the same Go daemon)
+- **Xcode 15+** or the **Swift 5.10+ command-line toolchain** (`swift build` must work — macOS 14+ required)
+
+### Build and launch
+
+```bash
+cd app
+./make-app.sh
+open VoiceInject.app
+```
+
+`make-app.sh` builds the Go daemon and the Swift app, bundles them into `VoiceInject.app` (with the daemon under `Contents/Resources/`), and ad-hoc signs the result. Re-run it any time you pull new changes.
+
+### Permissions
+
+Same Accessibility and Microphone requirements as the CLI (see [steps 4](#4-grant-accessibility-permission) and [5](#5-grant-microphone-permission) above) — but grant them to **VoiceInject.app itself** in System Settings, not your terminal, since the app launches and owns the daemon process.
+
+### One instance at a time
+
+The app's managed daemon and the standalone CLI daemon (`./voice-inject daemon`) both bind the same fixed socket at `~/Library/Application Support/voice-inject/daemon.sock`. Don't run both at once — quit whichever is running (⌘Q on the app window, or Ctrl+C for the CLI) before starting the other.
+
 ## Recording Limits
 
 | Parameter | Value |
