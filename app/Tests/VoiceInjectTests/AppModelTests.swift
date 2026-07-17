@@ -108,4 +108,41 @@ final class AppModelTests: XCTestCase {
 
         XCTAssertEqual(spawnCount(), 1, "startDaemonManually() must no-op unless daemonStatus is .stopped")
     }
+
+    /// Regression test for #44: a manual stop must not spend
+    /// RestartPolicy's one-time restart budget. The daemon script here
+    /// runs normally on its 1st and 3rd launches (blocks on stdin) but
+    /// crashes immediately on its 2nd launch (exit 7, no stdin wait).
+    /// Sequence: start (spawn 1, healthy) -> stopDaemon() (intentional,
+    /// must not touch policy) -> startDaemonManually() (spawn 2, crashes
+    /// immediately) -> if stopDaemon() had wrongly gone through
+    /// daemonDied(), the policy's one restart would already be spent and
+    /// this crash would land on .failed instead of auto-restarting to a
+    /// healthy spawn 3.
+    func testManualStopDoesNotConsumeRestartPolicyBudget() async throws {
+        try """
+        #!/bin/sh
+        echo spawned >> "\(markerURL.path)"
+        n=$(wc -l < "\(markerURL.path)" | tr -d ' ')
+        if [ "$n" = "2" ]; then exit 7; fi
+        cat >/dev/null
+        exit 0
+        """.write(to: scriptURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+
+        let model = AppModel()
+        model.startDaemon()
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertEqual(model.daemonStatus, .running)
+
+        model.stopDaemon()
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        XCTAssertEqual(model.daemonStatus, .stopped)
+
+        model.startDaemonManually() // spawn 2: crashes immediately (exit 7)
+        try await Task.sleep(nanoseconds: 1_500_000_000)
+
+        XCTAssertEqual(model.daemonStatus, .running, "the crash must still get its one automatic restart (spawn 3)")
+        XCTAssertEqual(spawnCount(), 3)
+    }
 }
