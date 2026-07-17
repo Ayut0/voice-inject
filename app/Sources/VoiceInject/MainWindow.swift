@@ -2,19 +2,52 @@ import SwiftUI
 
 struct MainWindow: View {
     @Environment(AppModel.self) private var model
+    @State private var activeTab: Tab = .settings
+
+    enum Tab { case settings, history }
 
     var body: some View {
         VStack(spacing: 0) {
             statusBanner
-            TabView {
+            tabBar
+            ZStack {
                 SettingsView()
-                    .tabItem { Label("Settings", systemImage: "gearshape") }
+                    .opacity(activeTab == .settings ? 1 : 0)
+                    .allowsHitTesting(activeTab == .settings)
                 HistoryView()
-                    .tabItem { Label("History", systemImage: "clock") }
-                // Issue #32 adds Setup here.
+                    .opacity(activeTab == .history ? 1 : 0)
+                    .allowsHitTesting(activeTab == .history)
             }
         }
         .frame(minWidth: 480, minHeight: 360)
+    }
+
+    private var tabBar: some View {
+        HStack(spacing: 4) {
+            tabButton(title: "Settings", systemImage: "slider.horizontal.3", tab: .settings)
+            tabButton(title: "History", systemImage: "clock", tab: .history)
+        }
+        .padding(6)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func tabButton(title: String, systemImage: String, tab: Tab) -> some View {
+        let isActive = activeTab == tab
+        return Button {
+            activeTab = tab
+        } label: {
+            Label(title, systemImage: systemImage)
+                .font(.system(size: 12, weight: isActive ? .semibold : .medium))
+                .foregroundStyle(isActive ? Color.primary : Color.secondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(isActive ? Color(nsColor: .controlBackgroundColor) : Color.clear)
+                        .shadow(color: .black.opacity(isActive ? 0.12 : 0), radius: 2, y: 1)
+                )
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
