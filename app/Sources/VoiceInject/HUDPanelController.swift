@@ -25,6 +25,10 @@ final class HUDPanelController {
         panel.isOpaque = false
         panel.hasShadow = false
         panel.ignoresMouseEvents = true
+        // The pill's spec is dark-glass-only (.ultraThinMaterial "(dark)"
+        // + white-opacity text) — force dark appearance so it doesn't
+        // wash out to unreadable light vibrancy under a Light Mode system.
+        panel.appearance = NSAppearance(named: .darkAqua)
         panel.contentView = hosting
     }
 
@@ -58,7 +62,10 @@ final class HUDPanelController {
         let frame = screen.visibleFrame
         let origin = NSPoint(
             x: frame.midX - size.width / 2,
-            y: frame.minY + 80
+            // `size` now includes HUDView.shadowInset padding on every
+            // side; shift down by that amount so the pill itself (not
+            // the transparent shadow margin) lands 80pt above the dock.
+            y: frame.minY + 80 - HUDView.shadowInset
         )
         panel.setFrame(NSRect(origin: origin, size: size), display: true)
     }
