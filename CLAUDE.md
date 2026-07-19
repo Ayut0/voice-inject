@@ -41,3 +41,17 @@ Key packages: `daemon` (hotkey + state machine), `record` (audio capture via Cor
 - Standard `testing` package with table-driven tests; test files as `*_test.go` next to source
 - MixedCaps for exported, lowerCamel for unexported identifiers
 - Imperative commit subjects (e.g., "Add CLI skeleton")
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked as GitHub Issues in `Ayut0/voice-inject`, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Repo labels already match the canonical vocabulary 1:1 (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
